@@ -2,6 +2,8 @@ import sqlite3
 conn = sqlite3.connect('university.db')
 cursor = conn.cursor()
 
+cursor.execute(''' PRAGMA foreign_keys = ON ''')
+
 from datetime import  datetime
 
 def validate_date(date_str):
@@ -14,7 +16,7 @@ def validate_date(date_str):
 
 
 
-class Students():
+class Students:
     def create(self):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Students (
@@ -41,22 +43,23 @@ class Students():
         conn.commit()
     def delete_students(self):
         cursor.execute("DROP TABLE Students")
+        conn.commit()
     def get_by_fak(self, department): #4
         cursor.execute('SELECT Name, Surname, DateOfBirth FROM Students WHERE Fak = ?', (department,))
         students = cursor.fetchall()
         return students
     def get_by_course(self, course_id): #6
         cursor.execute("""
-            SELECT Name, Surname, DateOfBirth
+            SELECT Students.ID, Name, Surname, DateOfBirth
             FROM Students
-            INNER JOIN Grades ON Grades.student_id = Students.ID
+            INNER JOIN Grades ON Grades.StudentID = Students.ID
             INNER JOIN Exams ON Exams.ID = Grades.ExamID
             INNER JOIN Courses ON Courses.ID = Exams.CourseID
-            WHERE Courses.id = ?""", (course_id,))
+            WHERE Courses.ID = ?""", (course_id))
         students = cursor.fetchall()
         return students
 
-class Teachers():
+class Teachers:
     def create(self):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Teachers (
@@ -81,8 +84,9 @@ class Teachers():
         conn.commit()
     def delete_teachers(self):
         cursor.execute("DROP TABLE Teachers")
+        conn.commit()
 
-class Courses():
+class Courses:
     def create(self):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Courses (
@@ -90,7 +94,7 @@ class Courses():
                 Title TEXT NOT NULL,
                 Description TEXT,
                 TeacherID INTEGER,
-                FOREIGN KEY (TeacherID) REFERENCES Teachers(ID)
+                FOREIGN KEY (TeacherID) REFERENCES Teachers(ID) ON DELETE CASCADE
             )''')
     def add(self, title, description, teacherID):
         cursor.execute('''
@@ -113,7 +117,7 @@ class Courses():
         courses = cursor.fetchall()
         return courses
 
-class Exams():
+class Exams:
     def create(self):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Exams (
@@ -121,7 +125,7 @@ class Exams():
                 Date DATE NOT NULL,
                 MaxScore INTEGER,
                 CourseID INTEGER,
-                FOREIGN KEY (CourseID) REFERENCES Courses(ID)
+                FOREIGN KEY (CourseID) REFERENCES Courses(ID) ON DELETE CASCADE 
             )''')
     def add(self, date, max_score, course_id):
         cursor.execute('''
@@ -131,7 +135,7 @@ class Exams():
     def update(self, date, maxscore, courseid, exam_id):
         cursor.execute('''
             UPDATE Exams
-            SET Title = ?, Description = ?, TeacherID = ?
+            SET Date = ?, MaxScore = ?, CourseID = ?
             WHERE ID = ?''', (date, maxscore, courseid, exam_id))
         conn.commit()
     def delete(self, exam_id):
@@ -140,7 +144,7 @@ class Exams():
     def delete_exams(self):
         cursor.execute("DROP TABLE Exams")
 
-class Grades():
+class Grades:
     def create(self):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Grades (
@@ -148,17 +152,17 @@ class Grades():
             Score INTEGER,
             StudentID INTEGER,
             ExamID INTEGER,
-            FOREIGN KEY (StudentID) REFERENCES Students(ID),
-            FOREIGN KEY (ExamID) REFERENCES Exams(ID)
+            FOREIGN KEY (StudentID) REFERENCES Students(ID) ON DELETE CASCADE,
+            FOREIGN KEY (ExamID) REFERENCES Exams(ID) ON DELETE CASCADE
         )''')
     def add(self, score, student_id, exam_id):
         cursor.execute('''
-            INSERT INTO Exams (Date, MaxScore, CourseID)
+            INSERT INTO Grades (Score, StudentID, ExamID)
             VALUES (?, ?, ?)''', (score, student_id, exam_id))
         conn.commit()
     def update(self, score, student_id, exam_id, grade_id):
         cursor.execute('''
-            UPDATE Exams
+            UPDATE Grades
             SET Score = ?, StudentID = ?, ExamID = ?
             WHERE ID = ?''', (score, student_id, exam_id, grade_id))
         conn.commit()
@@ -169,7 +173,7 @@ class Grades():
         cursor.execute("DROP TABLE Grades")
     def get_by_student_course(self, course_id): #19
         cursor.execute("""
-            SELECT Score
+            SELECT StudentID, Score
             FROM Grades
             INNER JOIN Exams ON Exams.ID = Grades.ExamID
             INNER JOIN Courses ON Courses.ID = Exams.CourseID
@@ -181,15 +185,15 @@ class Grades():
             SELECT AVG(Score)
             FROM Grades
             INNER JOIN Exams ON Exams.ID = Grades.ExamID
-            INNER JOIN Courses ON Courses,ID = Exams.CourseID
-            WHERE Courses.ID = ? AND Students.ID = ?""", (course_id, student_id,))
+            INNER JOIN Courses ON Courses.ID = Exams.CourseID
+            WHERE Courses.ID = ? AND Grades.StudentID = ? """, (course_id, student_id,))
         avg_grades = cursor.fetchall()
         return avg_grades
     def get_avg_by_student(self, student_id): #21
         cursor.execute("""
             SELECT AVG(Score)
             FROM Grades
-            WHERE Scores.StudentID = ?""", (student_id,))
+            WHERE Grades.StudentID = ? """, (student_id,))
         avg_grades = cursor.fetchall()
         return avg_grades
     def get_avg_by_fak(self, fak_name): #22
@@ -210,11 +214,15 @@ def create_database(s, t, c, e, g):
     g.create()
 def delete_all(s, t, c, e, g):
     s.delete_students()
+    s.create()
     t.delete_teachers()
+    t.create()
     c.delete_courses()
+    c.create()
     e.delete_exams()
+    e.create()
     g.delete_grades()
-    create_database(s, t, c, e, g)
+    g.create()
 
 def main():
     s = Students()
@@ -297,7 +305,8 @@ def main():
         elif choice == '5':
             try:
                 department = input("Номер курса: ")
-                s.get_by_course(department)
+                students = s.get_by_course(department)
+                print(students)
             except Exception as e:
                 print("Ошибка при получении студентов на курсе \n", e)
         elif choice == '6':
@@ -311,7 +320,7 @@ def main():
                 print("Ошибка при добавлении преподавателя \n", e)
         elif choice == '7':
             try:
-                teacher_id = int(input("ID преподавателя:"))
+                teacher_id = int(input("ID преподавателя: "))
                 name = input("Новое имя преподавателя: ")
                 surname = input("Новая фамилия преподавателя: ")
                 department = input("Новая кафедра преподавателя: ")
@@ -363,12 +372,15 @@ def main():
         elif choice == '13':
             try:
                 date = input("Дата экзамена (YYYY-MM-DD): ")
-                course_id = int(input("ID курса: "))
-                max_score = int(input("Максимальный балл: "))
-                e.add(date, max_score, course_id)
-                print("Экзамен добавлен")
-            except Exception as e:
-                print("Ошибка при добавлении экзамена \n", e)
+                if validate_date(date):
+                    course_id = int(input("ID курса: "))
+                    max_score = int(input("Максимальный балл: "))
+                    e.add(date, max_score, course_id)
+                    print("Экзамен добавлен")
+                else:
+                    print("Ошибка при вводе даты")
+            except Exception as x:
+                print("Ошибка при добавлении экзамена \n", x)
         elif choice == '14':
             try:
                 exam_id = int(input("ID экзамена: "))
@@ -380,20 +392,20 @@ def main():
                     print("Информация об экзамене изменена")
                 else:
                     print("Ошибка при вводе даты")
-            except Exception as e:
-                print("Ошибка при изменении информации об экзамене \n", e)
+            except Exception as q:
+                print("Ошибка при изменении информации об экзамене \n", q)
         elif choice == '15':
             try:
                 exam_id = int(input("ID экзамена: "))
                 e.delete(exam_id)
                 print("Экзамен удален")
-            except Exception as e:
-                print("Ошибка при удалении экзаменов \n", e)
+            except Exception as q:
+                print("Ошибка при удалении экзаменов \n", q)
         elif choice == '16':
             try:
                 score = int(input("Результат: "))
-                student_id = int(input("ID студента"))
-                exam_id = int(input("ID экзамена"))
+                student_id = int(input("ID студента: "))
+                exam_id = int(input("ID экзамена: "))
                 g.add(score, student_id, exam_id)
                 print("Оценка добавлена")
             except Exception as e:
@@ -402,8 +414,8 @@ def main():
             try:
                 grade_id = int(input("ID оценки"))
                 score = int(input("Новый результат: "))
-                student_id = int(input("Новый ID студента"))
-                exam_id = int(input("Новый ID экзамена"))
+                student_id = int(input("Новый ID студента: "))
+                exam_id = int(input("Новый ID экзамена: "))
                 g.update(score, student_id, exam_id, grade_id)
                 print("Оценка изменена")
             except Exception as e:
@@ -418,8 +430,8 @@ def main():
         elif choice == '19':
             try:
                 course_id = int(input("Номер курса: "))
-                g = g.get_by_student_course(course_id)
-                for i in g:
+                q = g.get_by_student_course(course_id)
+                for i in q:
                     print(i)
             except Exception as e:
                 print("Ошибка при получении оценок по курсу \n", e)
@@ -433,16 +445,16 @@ def main():
         elif choice == '21':
             try:
                 student_id = int(input("ID студента: "))
-                g.get_avg_by_student(student_id)
-                for i in g:
+                q = g.get_avg_by_student(student_id)
+                for i in q:
                     print(i)
             except Exception as e:
                 print("Ошибка при получении среднего бала по курсу \n", e)
         elif choice == '22':
             try:
                 fak = input("Название факультета: ")
-                g = g.get_avg_by_fak(fak)
-                for i in g:
+                q = g.get_avg_by_fak(fak)
+                for i in q:
                     print(i)
             except Exception as e:
                 print("Ошибка при получении среднего бала по факультету \n", e)
@@ -450,8 +462,8 @@ def main():
             try:
                 delete_all(s, t, c, e, g)
                 print("База данных удалена")
-            except Exception as e:
-                print("Ошибка при удалении данных \n", e)
+            except Exception as x:
+                print("Ошибка при удалении данных \n", x)
         elif choice == '24':
             print("Программа завершена")
             break
